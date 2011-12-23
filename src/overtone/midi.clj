@@ -187,16 +187,27 @@
    ShortMessage/POLY_PRESSURE :poly-pressure
    ShortMessage/PROGRAM_CHANGE :program-change})
 
+(def midi-shortmessage-keys
+  (merge midi-shortmessage-status midi-shortmessage-command))
+
+;;
+;; Note-off event:
+;; MIDI may send both Note-On and Velocity 0 or Note-Off.
+;;
+;; http://www.jsresources.org/faq_midi.html#no_note_off
 (defn midi-msg
   "Make a clojure map out of a midi object."
   [obj]
   {:chan (.getChannel obj)
-   :cmd  (.getCommand obj)
+   :cmd  (if (and (= ShortMessage/NOTE_ON (.getCommand obj))
+                  (== 0 (.getData2 obj) 0))
+           :note-off
+           (midi-shortmessage-keys (.getCommand obj)))
    :note (.getData1 obj)
    :vel  (.getData2 obj)
    :data1 (.getData1 obj)
    :data2 (.getData2 obj)
-   })
+   :status (midi-shortmessage-keys (.getStatus obj))})
 
 (defn midi-handle-events
   "Specify a single handler that will receive all midi events from the input device."
