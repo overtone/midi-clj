@@ -265,18 +265,45 @@
        (.setMessage ctl-msg ShortMessage/CONTROL_CHANGE channel ctl-num val)
        (midi-send-msg (:receiver sink) ctl-msg -1))))
 
-(defn- byte-seq-to-array
-  "Turn a seq of bytes into a native byte-array."
+(def hex-char-values (hash-map 
+  \0 0 \1 1 \2 2 \3 3 \4 4 \5 5 \6 6 \7 7 \8 8 \9 9 
+  \a 10 \b 11 \c 12 \d 13 \e 14 \f 15 
+  \A 10 \B 11 \C 12 \D 13 \E 14 \F 15 
+  \space \space \, \space \newline \space 
+  \tab \space \formfeed \space \return \space))
+
+(defn- not-space? 
+  [v] (not= \space v))
+
+(defn- byte-str-to-seq
+  "Turn a case-insensitive string of hex bytes into a seq.
+  Bytes can optionally be delimited by commas or whitespace"
+  [midi-str]  
+  (map #(+ (* 16 (first %)) (second %))
+    (partition-all 2 (map hex-char-values (filter not-space? (seq midi-str))))))
+   
+(defn- byte-seq-to-array 
+  "Turn a seq of bytes into a native byte-array of 2s-complement values."
   [bseq]
   (let [ary (byte-array (count bseq))]
     (doseq [i (range (count bseq))]
-      (aset-byte ary i (nth bseq i)))
+      (aset-byte ary i (unchecked-byte(nth bseq i))))
     ary))
 
-(defn midi-sysex
+(defmulti midi-sysex
   "Send a midi System Exclusive msg made up of the bytes in byte-seq
-  to the sink. It is also possible to specify byte-seq as a
-  byte-array."
+   byte-array, or a byte-string to the sink.  The byte string must
+   only contain bytes encoded as hex values.  Commas, spaces, and other
+   whitespace is ignored"
+   (fn[sink byte-seq] (type (first byte-seq))))
+  
+(defmethod midi-sysex java.lang.Character [sink byte-seq]
+  (let [ sys-msg (SysexMessage.)
+     bytes (byte-seq-to-array (byte-str-to-seq byte-seq))]
+    (.setMessage sys-msg bytes (count bytes))
+    (midi-send-msg (:receiver sink) sys-msg -1)))
+    
+(defmethod midi-sysex :default [sink byte-seq]
   [sink byte-seq]
   (let [sys-msg (SysexMessage.)
         bytes (if (= (type bytes) (type (byte-array 0)))
