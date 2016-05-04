@@ -14,7 +14,8 @@
      (javax.swing JFrame JScrollPane JList
                   DefaultListModel ListSelectionModel)
      (java.awt.event MouseAdapter)
-     (java.util.concurrent FutureTask ScheduledThreadPoolExecutor TimeUnit))
+     (java.util.concurrent FutureTask ScheduledThreadPoolExecutor TimeUnit)
+     (uk.co.xfactorylibrarians.coremidi4j CoreMidiDeviceProvider))
   (:use clojure.set)
   (:require [overtone.at-at :as at-at]))
 
@@ -24,9 +25,20 @@
 
 (def midi-player-pool (at-at/mk-pool))
 
+(def get-midi-device-info
+  "Will contain a function to invoke the appropriate version of the
+  getMidiDeviceInfo method. If CoreMidi4J is running, which means this
+  is a Mac and we have fixed versions of the MIDI devices available
+  which properly support SysEx messages and timestamps, the function
+  will use the CoreMidi4J version. Otherwise it will use the standard
+  Java version."
+  (if (CoreMidiDeviceProvider/isLibraryLoaded)
+    #(CoreMidiDeviceProvider/getMidiDeviceInfo)
+    #(MidiSystem/getMidiDeviceInfo)))
+
 (defn midi-devices []
   "Get all of the currently available midi devices."
-  (for [^MidiDevice$Info info (MidiSystem/getMidiDeviceInfo)]
+  (for [^MidiDevice$Info info (get-midi-device-info)]
     (let [device (MidiSystem/getMidiDevice info)
           n-tx   (.getMaxTransmitters device)
           n-rx   (.getMaxReceivers device)]
