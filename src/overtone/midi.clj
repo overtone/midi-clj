@@ -24,9 +24,28 @@
 
 (def midi-player-pool (at-at/mk-pool))
 
+(def get-midi-device-info
+  "Will contain a function to invoke the appropriate version of the
+  getMidiDeviceInfo method. If CoreMidi4J is installed and running,
+  which means this is a Mac, we are running Java 7 or later, and we
+  therefore have fixed versions of the MIDI devices available which
+  properly support SysEx messages and timestamps, the function will
+  use the CoreMidi4J method. Otherwise it will use the standard Java
+  method."
+  (try
+    (let [provider (Class/forName "uk.co.xfactorylibrarians.coremidi4j.CoreMidiDeviceProvider")
+          library-loaded-method (.getMethod provider "isLibraryLoaded" (make-array Class 0))
+          device-info-method (.getMethod provider "getMidiDeviceInfo" (make-array Class 0))
+          empty-object-args (make-array Object 0)]
+      (if (.invoke library-loaded-method nil empty-object-args)
+        #(.invoke device-info-method nil empty-object-args) ; CoreMidi4J is present and running. Use it.
+        #(MidiSystem/getMidiDeviceInfo)))  ; CoreMidi4J is present but not running (i.e. not a Mac). Use standard.
+    (catch ClassNotFoundException e
+      #(MidiSystem/getMidiDeviceInfo))))   ; CoreMidi4J is not present. Use standard implementation.
+
 (defn midi-devices []
   "Get all of the currently available midi devices."
-  (for [^MidiDevice$Info info (MidiSystem/getMidiDeviceInfo)]
+  (for [^MidiDevice$Info info (get-midi-device-info)]
     (let [device (MidiSystem/getMidiDevice info)
           n-tx   (.getMaxTransmitters device)
           n-rx   (.getMaxReceivers device)]
